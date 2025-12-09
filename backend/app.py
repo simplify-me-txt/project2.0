@@ -11,6 +11,7 @@ from functools import wraps
 import time
 from bson import ObjectId
 import json
+import datetime
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -279,6 +280,53 @@ def get_random_recipes():
 
 # ===== SEARCH ENDPOINTS =====
 
+@app.route('/api/recipes', methods=['POST'])
+@monitor_performance
+def save_recipe():
+    """Save a new recipe to the database"""
+    if not db or not db.is_connected():
+        return jsonify({'status': 'error', 'message': 'Database not connected'}), 503
+    
+    try:
+        data = request.get_json()
+        
+        # specific validation
+        required_fields = ['RecipeName', 'Ingredients', 'Instructions']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'status': 'error', 'message': f'Missing required field: {field}'}), 400
+        
+        # Check for duplicate connection
+        if db.get_recipe_by_name(data['RecipeName']):
+             return jsonify({'status': 'error', 'message': 'Recipe with this name already exists'}), 409
+
+        # Convert frontend schema to backend schema
+        backend_recipe = {
+            'title': data['RecipeName'],
+            'ingredients': data['Ingredients'], # List of strings
+            'steps': data['Instructions'].split('\n'),
+            'calories': data.get('Calories', 0),
+            'estimated_time': data.get('TotalTimeInMins', 0),
+            'difficulty': data.get('Difficulty', 'Intermediate'),
+            'cuisine': data.get('Cuisine', 'Unknown'),
+            'is_veg': data.get('IsVegetarian', False),
+            'created_at': datetime.datetime.now()
+        }
+        
+        # Insert into DB
+        result = db.collection.insert_one(backend_recipe)
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Recipe saved successfully',
+            'id': str(result.inserted_id)
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ Save recipe error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/search', methods=['GET'])
 @monitor_performance
 def search_recipes():
@@ -382,7 +430,14 @@ def filter_recipes():
         
         # Map filter fields to your schema
         if request.args.get('difficulty'):
-            query['difficulty'] = request.args.get('difficulty')
+            difficulty = request.args.get('difficulty')
+            # Map frontend values to backend values
+            difficulty_map = {
+                'Easy': 'Beginner',
+                'Medium': 'Intermediate',
+                'Hard': 'Advanced'
+            }
+            query['difficulty'] = difficulty_map.get(difficulty, difficulty)
         
         if request.args.get('cuisine'):
             query['cuisine'] = {'$regex': request.args.get('cuisine'), '$options': 'i'}
@@ -477,6 +532,131 @@ def analyze_difficulty():
         
     except Exception as e:
         print(f"❌ Difficulty analysis error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/analysis/compare', methods=['POST'])
+@monitor_performance
+def compare_recipes():
+    """Compare recipe against database averages and similar recipes"""
+    if not db or not db.is_connected():
+        return jsonify({'status': 'error', 'message': 'Database not connected'}), 503
+        
+    try:
+        data = request.get_json()
+        cuisine = data.get('cuisine')
+        calories = data.get('calories', 0)
+        time = data.get('time', 0)
+        
+        # 1. Get database averages (global)
+        pipeline = [
+            {
+                '$group': {
+                    '_id': None,
+                    'avg_calories': {'$avg': '$calories'},
+                    'avg_time': {'$avg': '$estimated_time'}
+                }
+            }
+        ]
+        global_stats = list(db.collection.aggregate(pipeline))
+        global_avg = global_stats[0] if global_stats else {'avg_calories': 0, 'avg_time': 0}
+        
+        # 2. Get cuisine averages (if cuisine provided)
+        cuisine_avg = {'avg_calories': 0, 'avg_time': 0}
+        if cuisine:
+            pipeline = [
+                {'$match': {'cuisine': {'$regex': f'^{cuisine}$', '$options': 'i'}}},
+                {
+                    '$group': {
+                        '_id': None,
+                        'avg_calories': {'$avg': '$calories'},
+                        'avg_time': {'$avg': '$estimated_time'}
+                    }
+                }
+            ]
+            c_stats = list(db.collection.aggregate(pipeline))
+            if c_stats:
+                cuisine_avg = c_stats[0]
+        
+        # 3. Find top 3 similar recipes (simple similarity based on cuisine + caloric proximity)
+        # In a real app, we'd use vector search or Jaccard similarity on ingredients
+        similar_recipes = []
+        if cuisine:
+            cursor = db.collection.find({
+                'cuisine': {'$regex': f'^{cuisine}$', '$options': 'i'},
+                'calories': {'$gte': calories * 0.8, '$lte': calories * 1.2}
+            }).limit(3)
+            
+            for doc in cursor:
+                similar_recipes.append({
+                    'name': doc.get('title'),
+                    'calories': doc.get('calories'),
+                    'time': doc.get('estimated_time'),
+                    'difficulty': doc.get('difficulty')
+                })
+                
+        return jsonify({
+            'status': 'success',
+            'comparison': {
+                'user': {'calories': calories, 'time': time},
+                'global_avg': {
+                    'calories': round(global_avg.get('avg_calories', 0)),
+                    'time': round(global_avg.get('avg_time', 0))
+                },
+                'cuisine_avg': {
+                    'calories': round(cuisine_avg.get('avg_calories', 0)),
+                    'time': round(cuisine_avg.get('avg_time', 0))
+                },
+                'similar_recipes': similar_recipes
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"❌ comparison error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/analysis/flavor', methods=['POST'])
+def analyze_flavor():
+    """Generate a mock flavor profile based on ingredients"""
+    try:
+        data = request.get_json()
+        ingredients = data.get('ingredients', [])
+        
+        # Simple heuristic keywords
+        profile = {
+            'Spicy': 0,
+            'Sweet': 0,
+            'Sour': 0,
+            'Bitter': 0,
+            'Salty': 0,
+            'Savory': 5 # Base savory score
+        }
+        
+        text = ' '.join(ingredients).lower()
+        
+        # Heuristics
+        if any(w in text for w in ['chili', 'pepper', 'spicy', 'paprika', 'masala']):
+            profile['Spicy'] += 7
+        if any(w in text for w in ['sugar', 'honey', 'jaggery', 'sweet', 'fruit']):
+            profile['Sweet'] += 7
+        if any(w in text for w in ['lemon', 'lime', 'tamarind', 'curd', 'yogurt', 'vinegar', 'amchur']):
+            profile['Sour'] += 6
+        if any(w in text for w in ['salt', 'soy', 'sauce']):
+            profile['Salty'] += 5
+        if any(w in text for w in ['methi', 'fenugreek', 'turmeric', 'karela']):
+            profile['Bitter'] += 4
+            
+        # Normalize to 0-10
+        for k in profile:
+            profile[k] = min(10, max(2, profile[k]))
+            
+        return jsonify({
+            'status': 'success',
+            'flavor_profile': profile
+        }), 200
+        
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
