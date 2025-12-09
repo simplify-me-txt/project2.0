@@ -124,31 +124,125 @@
                 </div>
             </section>
             
-            <!-- ===== ANALYZE VIEW ===== -->
+            <!-- ===== ANALYZE VIEW (RECIPE STUDIO) ===== -->
             <section id="analyzeView" class="view">
                 <div class="analyze-container">
-                    <h2>🧪 Recipe Analyzer</h2>
-                    <p class="subtitle">Analyze your custom recipe for calories, difficulty, and cooking time</p>
+                    <div class="studio-header">
+                        <h2>🧪 Recipe Studio</h2>
+                        <p class="subtitle">Draft, analyze, compare, and publish your culinary creations</p>
+                    </div>
                     
-                    <form id="analyzeForm" class="analyze-form">
-                        <div class="form-group">
-                            <label>Ingredients (one per line)</label>
-                            <textarea id="ingredientsInput" rows="8" placeholder="2 cups rice&#10;500g chicken breast&#10;3 tablespoons olive oil"></textarea>
+                    <div class="studio-grid">
+                        <!-- Left Column: Input Form -->
+                        <div class="studio-input">
+                            <form id="analyzeForm" class="analyze-form">
+                                <div class="form-group">
+                                    <label>Recipe Title</label>
+                                    <input type="text" id="recipeTitle" placeholder="e.g. Grandma's Secret Butter Chicken" required>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group half">
+                                        <label>Cuisine</label>
+                                        <input type="text" id="recipeCuisine" placeholder="e.g. North Indian" list="cuisineList">
+                                        <datalist id="cuisineList">
+                                            <!-- Populated by JS -->
+                                        </datalist>
+                                    </div>
+                                    <div class="form-group half checkbox-group">
+                                        <label>
+                                            <input type="checkbox" id="isVegetarian">
+                                            Vegetarian? 🥗
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Ingredients (one per line)</label>
+                                    <textarea id="ingredientsInput" rows="8" placeholder="2 cups rice&#10;500g chicken breast&#10;3 tablespoons olive oil" required></textarea>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Cooking Instructions</label>
+                                    <textarea id="stepsInput" rows="10" placeholder="1. Heat oil in a pan&#10;2. Add chicken and cook until golden&#10;3. Add rice and water" required></textarea>
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary btn-large">
+                                        <i class="fas fa-wand-magic-sparkles"></i> Analyze & Compare
+                                    </button>
+                                    <button type="button" id="saveRecipeBtn" class="btn btn-success btn-large" style="display: none;">
+                                        <i class="fas fa-save"></i> Publish Recipe
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Cooking Steps</label>
-                            <textarea id="stepsInput" rows="10" placeholder="1. Heat oil in a pan&#10;2. Add chicken and cook until golden&#10;3. Add rice and water"></textarea>
+
+                        <!-- Right Column: Results (Hidden initially) -->
+                        <div id="analysisResults" class="studio-results" style="display: none;">
+                            <!-- Tabs for results -->
+                            <div class="results-tabs">
+                                <button class="tab-btn active" data-tab="overview">Overview</button>
+                                <button class="tab-btn" data-tab="flavor">Flavor Profile</button>
+                                <button class="tab-btn" data-tab="compare">Comparison</button>
+                            </div>
+
+                            <!-- Overview Tab -->
+                            <div id="tab-overview" class="result-content active">
+                                <div class="score-card">
+                                    <div class="score-circle">
+                                        <span id="healthScore">85</span>
+                                        <label>Health Score</label>
+                                    </div>
+                                    
+                                    <div class="quick-stats">
+                                        <div class="q-stat">
+                                            <i class="fas fa-fire"></i>
+                                            <span id="resCalories">0</span> kcal
+                                        </div>
+                                        <div class="q-stat">
+                                            <i class="fas fa-clock"></i>
+                                            <span id="resTime">0</span> min
+                                        </div>
+                                        <div class="q-stat">
+                                            <i class="fas fa-layer-group"></i>
+                                            <span id="resDifficulty">Medium</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="allergen-box" id="allergenBox" style="display: none;">
+                                    <h4>⚠️ Allergens Detected</h4>
+                                    <ul id="allergenList"></ul>
+                                </div>
+
+                                <div class="suggestions-box">
+                                    <h4>💡 Chef's Suggestions</h4>
+                                    <div id="chefSuggestions"></div>
+                                </div>
+                            </div>
+
+                            <!-- Flavor Profile Tab -->
+                            <div id="tab-flavor" class="result-content">
+                                <div class="chart-container">
+                                    <canvas id="flavorRadarChart"></canvas>
+                                </div>
+                                <p class="chart-caption">Flavor balance based on ingredients</p>
+                            </div>
+
+                            <!-- Comparison Tab -->
+                            <div id="tab-compare" class="result-content">
+                                <h4>vs. Database Average</h4>
+                                <div class="comparison-bars" id="comparisonBars">
+                                    <!-- Injected by JS -->
+                                </div>
+
+                                <h4 class="mt-4">Similar Recipes</h4>
+                                <div class="similar-recipes-list" id="similarRecipes">
+                                    <!-- Injected by JS -->
+                                </div>
+                            </div>
                         </div>
-                        
-                        <button type="submit" class="btn btn-primary btn-large">
-                            <i class="fas fa-flask"></i> Analyze Recipe
-                        </button>
-                    </form>
-                    
-                    <!-- Analysis Results -->
-                    <div id="analysisResults" class="analysis-results" style="display: none;">
-                        <!-- Results will be injected here -->
                     </div>
                 </div>
             </section>
